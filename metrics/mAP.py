@@ -1,8 +1,8 @@
 # Title: RADDet
 # Authors: Ao Zhang, Erlik Nowruzi, Robert Laganiere
 import numpy as np
-
 import util.helper as helper
+
 
 def getTruePositive(pred, gt, input_size, iou_threshold=0.5, mode="3D"):
     """ output tp (true positive) with size [num_pred, ] """
@@ -25,7 +25,7 @@ def getTruePositive(pred, gt, input_size, iou_threshold=0.5, mode="3D"):
             gt_class = gt[..., 4]
 
         if len(detected_gt_boxes) == len(gt): break
-        
+
         if mode == "3D":
             iou = helper.iou3d(current_pred_box[np.newaxis, ...], gt_box, input_size)
         else:
@@ -53,22 +53,22 @@ def computeAP(tp, fp, num_gt_class):
     mrec = recall.copy()
     mpre = precision.copy()
 
-    for i in range(len(mpre)-2, -1, -1):
-        mpre[i] = max(mpre[i], mpre[i+1])
+    for i in range(len(mpre) - 2, -1, -1):
+        mpre[i] = max(mpre[i], mpre[i + 1])
 
     i_list = []
     for i in range(1, len(mrec)):
-        if mrec[i] != mrec[i-1]:
-            i_list.append(i) # if it was matlab would be i + 1
+        if mrec[i] != mrec[i - 1]:
+            i_list.append(i)  # if it was matlab would be i + 1
 
     ap = 0.0
     for i in i_list:
-        ap += ((mrec[i]-mrec[i-1])*mpre[i])
+        ap += ((mrec[i] - mrec[i - 1]) * mpre[i])
     return ap, mrec, mpre
 
 
 def mAP(predictions, gts, input_size, ap_each_class, tp_iou_threshold=0.5, mode="3D"):
-    """ Main function for calculating mAP 
+    """ Main function for calculating mAP
     Args:
         predictions         ->      [num_pred, 6 + score + class]
         gts                 ->      [num_gt, 6 + class]"""
@@ -83,15 +83,16 @@ def mAP(predictions, gts, input_size, ap_each_class, tp_iou_threshold=0.5, mode=
         ### NOTE: get the ground truth per class ###
         gt_class = gts[gts[..., 6] == class_i]
         tp, fp = getTruePositive(pred_class, gt_class, input_size, \
-                                iou_threshold=tp_iou_threshold, mode=mode)
+                                 iou_threshold=tp_iou_threshold, mode=mode)
         ap, mrecall, mprecision = computeAP(tp, fp, len(gt_class))
         ap_all.append(ap)
         ap_each_class[int(class_i)].append(ap)
     mean_ap = np.mean(ap_all)
     return mean_ap, ap_each_class
 
+
 def mAP2D(predictions, gts, input_size, ap_each_class, tp_iou_threshold=0.5, mode="2D"):
-    """ Main function for calculating mAP 
+    """ Main function for calculating mAP
     Args:
         predictions         ->      [num_pred, 4 + score + class]
         gts                 ->      [num_gt, 4 + class]"""
@@ -105,7 +106,7 @@ def mAP2D(predictions, gts, input_size, ap_each_class, tp_iou_threshold=0.5, mod
         ### NOTE: get the ground truth per class ###
         gt_class = gts[gts[..., 4] == class_i]
         tp, fp = getTruePositive(pred_class, gt_class, input_size, \
-                                iou_threshold=tp_iou_threshold, mode=mode)
+                                 iou_threshold=tp_iou_threshold, mode=mode)
         ap, mrecall, mprecision = computeAP(tp, fp, len(gt_class))
         ap_all.append(ap)
         ap_each_class[int(class_i)].append(ap)

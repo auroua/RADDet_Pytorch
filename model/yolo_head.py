@@ -99,8 +99,11 @@ def decodeYolo(input, input_size, anchor_boxes, scale):
     raw_conf = pred_raw[:, :, :, :, :, 6:7]
     raw_prob = pred_raw[:, :, :, :, :, 7:]
 
-    xyz_grid = torch.meshgrid([torch.arange(0, g0), torch.arange(0, g1), torch.arange(0, g2)])
-    xyz_grid = [xyz_grid[1], xyz_grid[0], xyz_grid[2]]
+    xx, yy, zz = torch.meshgrid([torch.arange(0, g0), torch.arange(0, g1), torch.arange(0, g2)])
+    # xx = rearrange(xx, "h w c -> w h c")
+    # yy = rearrange(yy, "h w c -> w h c")
+    # zz = rearrange(zz, "h w c -> w h c")
+    xyz_grid = [yy, xx, zz]
     xyz_grid = torch.stack(xyz_grid, dim=-1).to(input.device)
     xyz_grid = torch.unsqueeze(xyz_grid, 3)
     xyz_grid = rearrange(xyz_grid, "h w c a d -> w h c a d")

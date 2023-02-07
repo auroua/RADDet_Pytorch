@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 class RadDetLoss(torch.nn.Module):
@@ -123,5 +124,72 @@ def tf_iou3d(box_xyzwhd_1, box_xyzwhd_2, input_size):
     return iou
 
 
+def yoloheadToPredictions2D(yolohead_output, conf_threshold=0.5):
+    """ Transfer YOLO HEAD output to [:, 6], where 6 means
+    [x, y, w, h, score, class_index]"""
+    prediction = yolohead_output.reshape(-1, yolohead_output.shape[-1])
+    prediction_class = np.argmax(prediction[:, 5:], axis=-1)
+    predictions = np.concatenate([prediction[:, :5],
+                                  np.expand_dims(prediction_class, axis=-1)], axis=-1)
+    conf_mask = (predictions[:, 4] >= conf_threshold)
+    predictions = predictions[conf_mask]
+    return predictions
 
 
+def nms2DOverClass(bboxes, iou_threshold, input_size, sigma=0.3, method='nms'):
+    """ Bboxes format [x, y, w, h, score, class_index] """
+    """ Implemented the same way as YOLOv4 """
+    assert method in ['nms', 'soft-nms']
+    if len(bboxes) == 0:
+        best_bboxes = np.zeros([0, 6])
+    else:
+        best_bboxes = []
+        ### NOTE: start looping over boxes to find the best one ###
+        while len(bboxes) > 0:
+            max_ind = np.argmax(bboxes[:, 4])
+            best_bbox = bboxes[max_ind]
+            best_bboxes.append(best_bbox)
+            bboxes = np.concatenate([bboxes[: max_ind], bboxes[max_ind + 1:]])
+            iou = iou2d(best_bbox[np.newaxis, :4], bboxes[:, :4])
+            weight = np.ones((len(iou),), dtype=np.float32)
+            if method == 'nms':
+                iou_mask = iou > iou_threshold
+                weight[iou_mask] = 0.0
+            if method == 'soft-nms':
+                weight = np.exp(-(1.0 * iou ** 2 / sigma))
+            bboxes[:, 4] = bboxes[:, 4] * weight
+            score_mask = bboxes[:, 4] > 0.
+            bboxes = bboxes[score_mask]
+        if len(best_bboxes) != 0:
+            best_bboxes = np.array(best_bboxes)
+        else:
+            best_bboxes = np.zeros([0, 6])
+    return best_bboxes
+
+
+def iou2d(box_xywh_1, box_xywh_2):
+    """ Numpy version of 3D bounding box IOU calculation
+    Args:
+        box_xywh_1        ->      box1 [x, y, w, h]
+        box_xywh_2        ->      box2 [x, y, w, h]"""
+    assert box_xywh_1.shape[-1] == 4
+    assert box_xywh_2.shape[-1] == 4
+    ### areas of both boxes
+    box1_area = box_xywh_1[..., 2] * box_xywh_1[..., 3]
+    box2_area = box_xywh_2[..., 2] * box_xywh_2[..., 3]
+    ### find the intersection box
+    box1_min = box_xywh_1[..., :2] - box_xywh_1[..., 2:] * 0.5
+    box1_max = box_xywh_1[..., :2] + box_xywh_1[..., 2:] * 0.5
+    box2_min = box_xywh_2[..., :2] - box_xywh_2[..., 2:] * 0.5
+    box2_max = box_xywh_2[..., :2] + box_xywh_2[..., 2:] * 0.5
+
+    left_top = np.maximum(box1_min, box2_min)
+    bottom_right = np.minimum(box1_max, box2_max)
+    ### get intersection area
+    intersection = np.maximum(bottom_right - left_top, 0.0)
+    intersection_area = intersection[..., 0] * intersection[..., 1]
+    ### get union area
+    union_area = box1_area + box2_area - intersection_area
+    ### get iou
+    iou = np.nan_to_num(intersection_area / (union_area + 1e-10))
+    return iou

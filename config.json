@@ -1,4 +1,5 @@
 {
+	    "NAME" : "Authors",
 		"DATA" :
 		{
 				"train_set_dir": "/home/albert_wei/fdisk_c/train_dataset_radia/RADDet_reprocessed/train",
@@ -9,7 +10,11 @@
 				"global_min_log" : 0.0,
 				"global_variance_log" : 6.8367246,
 				"max_boxes_per_frame" : 30,
-				"trainset_portion" : 0.8
+				"trainset_portion" : 0.8,
+				"headoutput_shape": [3, 16, 16, 4, 78],
+				"cart_shape": [3, 16, 32, 6, 11],
+				"RAD_dir": "RAD",
+				"RD_dir" : "RD"
 		},
 
 		"MODEL" :
@@ -22,14 +27,15 @@
 				"expensions": [0, 0, 1, 1],
 				"blocks": [2, 4, 8, 16],
 				"yolo_feature_size": [3, 256, 16, 16],
-				"feature_out_shape": [3, 16, 16, 4, 78]
+				"feature_out_shape": [3, 16, 16, 4, 78],
+				"bk_output_size": [16, 16, 256]
 		},
 
 		"TRAIN" :
 		{
 				"if_validate": true,
 				"epochs" : 1000,
-				"batch_size" : 8,
+				"batch_size" : 4,
 				"focal_loss_iou_threshold" : 0.3,
 				"log_dir": "./logs/RadarResNet",
 				"learningrate_init": 0.0001,
@@ -45,7 +51,7 @@
 
 		"EVALUATE" :
 		{
-				"log_dir": "./logs/RadarResNet",
+				"log_dir": "./logs/evaluate/RadarResNet",
 				"confidence_threshold" : 0.5,
 				"nms_iou3d_threshold": 0.1,
 				"mAP_iou3d_threshold": [0.1, 0.3, 0.5, 0.7]

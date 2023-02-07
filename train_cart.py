@@ -9,14 +9,14 @@ from engine.launch import launch
 from model.model import RADDet
 from utils.collect_env import collect_env_info
 from utils.dist_utils import get_rank
-from dataset.radar_dataset import RararDataset
+from dataset.radar_dataset_3d import RararDataset3D
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
-from model.yolo_head import decodeYolo, yoloheadToPredictions, nms
-from model.yolo_loss import RadDetLoss
 from utils.optimizer_utils import LinearWarmupCosineAnnealingLR
 from metrics import mAP
 import utils.dist_utils as dist_utils
+from model.model_cart import RADDetCart
+from model.yolo_loss import yoloheadToPredictions2D, nms2DOverClass
 
 
 def main(args):
@@ -31,19 +31,43 @@ def main(args):
     config_radar = config["RADAR_CONFIGURATION"]
     config_model = config["MODEL"]
     config_train = config["TRAIN"]
-    config_evaluate = config["EVALUATE"]
 
     # load anchor boxes with order
     anchor_boxes = loader.readAnchorBoxes(anchor_boxes_file="./anchors.txt")
     num_classes = len(config_data["all_classes"])
 
+    anchor_boxes_cart = loader.readAnchorBoxes(anchor_boxes_file="./anchors_cartboxes.txt")
+
+
     ### NOTE: using the yolo head shape out from model for data generator ###
     model = RADDet(config_model, config_data, config_train, anchor_boxes)
-    model.to(device)
-    train_dataset = RararDataset(config_data, config_train, config_model,
-                                 config_model["feature_out_shape"], anchor_boxes, dType="train")
-    validate_dataset = RararDataset(config_data, config_train, config_model,
-                                    config_model["feature_out_shape"], anchor_boxes, dType="validate")
+    # model.to(device)
+    print(f"Load pretrained model from {args.backbone_resume_from}")
+    model.load_state_dict(torch.load(args.backbone_resume_from))
+
+    model_bk = model.backbone
+
+    model_cart = RADDetCart(config_model, config_data, config_train, anchor_boxes_cart, config_model["bk_output_size"],
+                            device, backbone=model_bk)
+    model_cart.to(device)
+
+    train_dataset = RararDataset3D(config_data=config_data,
+                                   config_train=config_train,
+                                   config_model=config_model,
+                                   headoutput_shape=config_data["headoutput_shape"],
+                                   anchors=anchor_boxes,
+                                   anchors_cart=anchor_boxes_cart,
+                                   cart_shape=config_data["cart_shape"],
+                                   dType="train")
+
+    validate_dataset = RararDataset3D(config_data=config_data,
+                                      config_train=config_train,
+                                      config_model=config_model,
+                                      headoutput_shape=config_data["headoutput_shape"],
+                                      anchors=anchor_boxes,
+                                      anchors_cart=anchor_boxes_cart,
+                                      cart_shape=config_data["cart_shape"],
+                                      dType="validate")
 
     train_loader = DataLoader(train_dataset,
                               batch_size=config_train["batch_size"]//args.num_gpus,
@@ -59,8 +83,15 @@ def main(args):
                                  pin_memory=True,
                                  persistent_workers=True)
 
-    test_dataset = RararDataset(config_data, config_train, config_model,
-                                config_model["feature_out_shape"], anchor_boxes, dType="test")    # 2032
+    test_dataset = RararDataset3D(config_data=config_data,
+                                  config_train=config_train,
+                                  config_model=config_model,
+                                  headoutput_shape=config_data["headoutput_shape"],
+                                  anchors=anchor_boxes,
+                                  anchors_cart=anchor_boxes_cart,
+                                  cart_shape=config_data["cart_shape"],
+                                  dType="test")
+
     test_loader = DataLoader(test_dataset,
                              batch_size=config_train["batch_size"]//args.num_gpus,
                              shuffle=False,
@@ -69,11 +100,11 @@ def main(args):
                              persistent_workers=True)
     if get_rank() == 0:
         ### NOTE: training settings ###
-        # logdir = os.path.join(config_train["log_dir"],
+        # logdir = os.path.join(config_train["log_dir"], "cartesian",
         #                       "b_" + str(config_train["batch_size"]) + "lr_" + str(config_train["learningrate_init"]))
-        logdir = os.path.join(config_evaluate["log_dir"], config["NAME"] + "-" + config_data["RAD_dir"] +
+        logdir = os.path.join(config_train["log_dir"], config["NAME"] + "-" + config_data["RAD_dir"] +
                               "-b_" + str(config_train["batch_size"]) +
-                              "-lr_" + str(config_train["learningrate_init"]))
+                              "-lr_" + str(config_train["learningrate_init"]) + "_cartesian")
         if not os.path.exists(logdir):
             os.makedirs(logdir)
         writer = SummaryWriter(logdir=logdir)
@@ -88,15 +119,6 @@ def main(args):
                                               eta_min=config_train["learningrate_end"],
                                               max_epochs=config_train["epochs"],
                                               warmup_start_lr=config_train["learningrate_init"])
-
-    anchor_boxes = torch.tensor(anchor_boxes, dtype=torch.float32).to(device)
-    input_size = torch.tensor(list(config_model["input_shape"]), dtype=torch.float32).to(device)
-
-    criterion = RadDetLoss(
-        input_size=input_size,
-        focal_loss_iou_threshold=config_train["focal_loss_iou_threshold"]
-    )
-
     step, best_val = 0, 0.0
     for i in range(config_train["epochs"]):
         for d in train_loader:
@@ -105,13 +127,9 @@ def main(args):
             label = label.to(device)
             raw_boxes = raw_boxes.to(device)
             # print(data.shape, label.shape, raw_boxes.shape, data.device)
-            _, feature = model(data)
-            pred_raw, pred = decodeYolo(feature,
-                                        input_size=input_size,
-                                        anchor_boxes=anchor_boxes,
-                                        scale=config_model["yolohead_xyz_scales"][0])
-            box_loss, conf_loss, category_loss = criterion(pred_raw, pred, label, raw_boxes[..., :6])
-            total_loss = box_loss + conf_loss + category_loss
+            pred_raw = model_cart(data)
+            pred = model_cart.decodeYolo(pred_raw)
+            total_loss, box_loss, conf_loss, category_loss = model_cart.loss(pred_raw, pred, label, raw_boxes[..., :4])
             optimizer.zero_grad()
             total_loss.backward()
             optimizer.step()
@@ -131,7 +149,8 @@ def main(args):
             if get_rank() == 0:
                 print("=======> epochs: %4d, train step: %4d, lr: %.10f, total_loss: %4.2f, "
                       "box_loss: %4.2f, conf_loss: %4.2f, category_loss: %4.2f" %
-                      (i, step, optimizer.param_groups[0]['lr'], total_loss_r, box_loss_r, conf_loss_r, category_loss_r))
+                      (i, step, optimizer.param_groups[0]['lr'], total_loss_r, box_loss_r, conf_loss_r,
+                       category_loss_r))
         if get_rank() == 0:
             print(f"epochs: {i}, start validation")
             mean_ap_test = 0.0
@@ -150,15 +169,15 @@ def main(args):
                     data = data.to(device)
                     label = label.to(device)
                     raw_boxes = raw_boxes.to(device)
-                    feature_bk, feature = model(data)
-                    pred_raw, pred = decodeYolo(feature,
-                                                input_size=input_size,
-                                                anchor_boxes=anchor_boxes,
-                                                scale=config_model["yolohead_xyz_scales"][0])
-                    box_loss, conf_loss, category_loss = criterion(pred_raw, pred, label, raw_boxes[..., :6])
+                    # feature = model_bk(data)
+                    pred_raw = model_cart(data)
+                    pred = model_cart.decodeYolo(pred_raw)
+                    total_loss, box_loss, conf_loss, category_loss = model_cart.loss(pred_raw, pred, label,
+                                                                                     raw_boxes[..., :4])
                     box_loss_b, conf_loss_b, category_loss_b = box_loss.cpu().detach(), conf_loss.cpu().detach(), \
                         category_loss.cpu().detach()
-                    total_losstest.append(box_loss_b+conf_loss_b+category_loss_b)
+                    total_loss_b = total_loss.cpu().detach()
+                    total_losstest.append(total_loss_b)
                     box_losstest.append(box_loss_b)
                     conf_losstest.append(conf_loss_b)
                     category_losstest.append(category_loss_b)
@@ -167,11 +186,11 @@ def main(args):
                     for batch_id in range(raw_boxes.shape[0]):
                         raw_boxes_frame = raw_boxes[batch_id]
                         pred_frame = pred[batch_id]
-                        predicitons = yoloheadToPredictions(pred_frame,
+                        predicitons = yoloheadToPredictions2D(pred_frame,
                                                             conf_threshold=config_model["confidence_threshold"])
-                        nms_pred = nms(predicitons, config_model["nms_iou3d_threshold"],
+                        nms_pred = nms2DOverClass(predicitons, config_model["nms_iou3d_threshold"],
                                        config_model["input_shape"], sigma=0.3, method="nms")
-                        mean_ap, ap_all_class = mAP.mAP(nms_pred, raw_boxes_frame,
+                        mean_ap, ap_all_class = mAP.mAP2D(nms_pred, raw_boxes_frame,
                                                         config_model["input_shape"], ap_all_class,
                                                         tp_iou_threshold=config_model["mAP_iou3d_threshold"])
                         mean_ap_test += mean_ap
@@ -205,12 +224,12 @@ def main(args):
             ckpt_file_path = os.path.join(log_specific_dir, f"{i}.pth")
             ckpt_file_best_path = os.path.join(log_specific_dir, "best.pth")
             with open(ckpt_file_path, 'wb') as f:
-                torch.save(model.state_dict(), f)
+                torch.save(model_cart.state_dict(), f)
             print("Saving checkpoint to {}".format(ckpt_file_path))
             if mean_ap_test > best_val:
                 best_val = mean_ap_test
                 with open(ckpt_file_best_path, 'wb') as f:
-                    torch.save(model.state_dict(), f)
+                    torch.save(model_cart.state_dict(), f)
             print("Current model is the best model at present, and it is saved to {}".format(ckpt_file_best_path))
         if dist_utils.get_world_size() > 1 and dist_utils.get_world_size() > 0:
             torch.distributed.barrier()
@@ -233,8 +252,9 @@ def get_parse():
     parser.add_argument("--dist_url", type=str,
                         default="tcp://127.0.0.1:{}".format(port),
                         help="initialization URL for pytorch distributed backend.")
-    parser.add_argument("--eval-only", action="store_true", help="perform evaluation only")
-    parser.add_argument("--resume", action="store_true", help="resume from previous ckpt file")
+    parser.add_argument("--backbone_resume_from", type=str,
+                        default="/home/albert_wei/WorkSpaces_2023/RADIA/RADDet/RADDet_Pytorch/logs/RadarResNet/b_4lr_0.0001/ckpt/best.pth",
+                        help="The number of machines.")
     args = parser.parse_args()
     return args
 

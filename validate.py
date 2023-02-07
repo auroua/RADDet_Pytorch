@@ -7,7 +7,7 @@ import sys
 import numpy as np
 from engine.launch import launch
 from model.model import RADDet
-from.utils.collect_env import collect_env_info
+from utils.collect_env import collect_env_info
 from utils.dist_utils import get_rank
 from dataset.radar_dataset import RararDataset
 from torch.utils.data import DataLoader
@@ -80,7 +80,7 @@ def main(args):
             data = data.to(device)
             label = label.to(device)
             raw_boxes = raw_boxes.to(device)
-            feature = model(data)
+            _, feature = model(data)
             pred_raw, pred = decodeYolo(feature,
                                         input_size=input_size,
                                         anchor_boxes=anchor_boxes,
@@ -135,7 +135,7 @@ def get_parse():
                         default="tcp://127.0.0.1:{}".format(port),
                         help="initialization URL for pytorch distributed backend.")
     parser.add_argument("--resume_from", type=str,
-                        default="/home/albert_wei/WorkSpaces_2023/RADIA/RADDet/RADDet_Pytorch/logs/RadarResNet/b_8lr_0.0001/ckpt/best.pth",
+                        default="/home/albert_wei/WorkSpaces_2023/RADIA/RADDet/RADDet_Pytorch/logs/RadarResNet/b_4lr_0.0001/ckpt/best.pth",
                         help="The number of machines.")
     args = parser.parse_args()
     return args

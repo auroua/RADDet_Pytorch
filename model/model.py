@@ -1,8 +1,6 @@
-import numpy as np
 import torch.nn as nn
-import torchvision
 from model.backbone_radarResNet import build_backbone
-from model.yolo_head import singleLayerHead, decodeYolo
+from model.yolo_head import singleLayerHead
 
 
 class RADDet(nn.Module):
@@ -21,12 +19,8 @@ class RADDet(nn.Module):
                                          num_class=self.num_class,
                                          last_channel=int(self.yolo_feature_size[-1]/4),
                                          in_feature_size=self.yolo_feature_size)
-        # self.radarLoss = RadDetLoss(
-        #     input_size=self.input_size,
-        #     focal_loss_iou_threshold=self.focal_loss_iou_threshold
-        # )
 
     def forward(self, input):
-        out = self.backbone(input)
-        out = self.yolo_head(out)
-        return out
+        bk_out = self.backbone(input)
+        out = self.yolo_head(bk_out)
+        return bk_out, out

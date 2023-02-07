@@ -400,9 +400,32 @@ def drawRadarBoxes(stereo_left_image, RD_img, RA_img, RA_cart_img, \
     imgPlot(RA_img, axes[2], None, 1, "RA") 
     imgPlot(RA_cart_img, axes[3], None, 1, "Cartesian") 
 
+def RandomColors(N, bright=True):
+    """ Define colors for all categories. """
+    brightness = 1.0 if bright else 0.7
+    hsv = [(i / N, 1, brightness) for i in range(N)]
+    colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
+    random.seed(1111)
+    random.shuffle(colors)
+    return colors
+
+def SetColorsRed(N, bright=True):
+    """ Define colors for all categories. """
+    brightness = 1.0 if bright else 0.7
+    hsv = [(i*0 / N, 1, brightness) for i in range(N)]
+    colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
+    return colors
+
+def SetColorsGreen(N, bright=True):
+    """ Define colors for all categories. """
+    brightness = 1.0 if bright else 0.7
+    hsv = [(i*0/N+3/8, 1, brightness) for i in range(N)]
+    colors = list(map(lambda c: colorsys.hsv_to_rgb(*c), hsv))
+    return colors
+
 
 def drawRadarPredWithGt(stereo_left_image, RD_img, RA_img, RA_cart_img, \
-                        radar_instances, radar_nms_pred, all_classes, colors, axes, \
+                        radar_instances, radar_nms_pred, all_classes, gt_colors, pred_colors, axes, \
                         radar_cart_nms=None):
     """ draw only boxes on the input images """
     assert len(radar_instances["boxes"]) == len(radar_instances["classes"])
@@ -411,7 +434,7 @@ def drawRadarPredWithGt(stereo_left_image, RD_img, RA_img, RA_cart_img, \
         bbox3d = radar_instances["boxes"][i]
         cls = radar_instances["classes"][i]
         cart_box = radar_instances["cart_boxes"][i]
-        color = colors[all_classes.index(cls)]
+        color = gt_colors[all_classes.index(cls)]
         ### draw box
         mode = "box" # either "box" or "ellipse"
         ### boxes information added in the ground truth dictionary
@@ -430,7 +453,7 @@ def drawRadarPredWithGt(stereo_left_image, RD_img, RA_img, RA_cart_img, \
     for i in range(len(radar_nms_pred)):
         bbox3d = radar_nms_pred[i, :6]
         cls = int(radar_nms_pred[i, 7])
-        color = colors[int(cls)]
+        color = pred_colors[int(cls)]
         ### draw box
         mode = "box" # either "box" or "ellipse"
         ### boxes information added in the ground truth dictionary
@@ -447,16 +470,16 @@ def drawRadarPredWithGt(stereo_left_image, RD_img, RA_img, RA_cart_img, \
             cart_box = np.expand_dims(radar_cart_nms[i, :4], axis=0)
             cls = int(radar_cart_nms[i, 5])
             class_name = all_classes[cls]
-            color = colors[int(cls)]
+            color = pred_colors[int(cls)]
             mode = "box" # either "box" or "ellipse"
             drawBoxOrEllipse(cart_box, class_name, axes[2], color, \
                                 x_shape=RA_cart_img.shape[1], mode=mode)
 
     imgPlot(stereo_left_image, axes[-1], None, None, "camera")
-    imgPlot(RD_img, axes[0], None, 1, "RD") 
-    imgPlot(RA_img, axes[1], None, 1, "RA") 
+    imgPlot(RD_img, axes[0], None, 1, "RD")
+    imgPlot(RA_img, axes[1], None, 1, "RA")
     if len(axes) > 3:
-        imgPlot(RA_cart_img, axes[2], None, 1, "Cartesian") 
+        imgPlot(RA_cart_img, axes[2], None, 1, "Cartesian")
 
 
 def drawInference(stereo_left_image, RD_img, RA_img, RA_cart_img, radar_nms_pred, \
