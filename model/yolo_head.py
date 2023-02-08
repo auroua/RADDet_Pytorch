@@ -76,6 +76,38 @@ def nms(bboxes, iou_threshold, input_size, sigma=0.3, method='nms'):
     return best_bboxes
 
 
+def nmsOverClass(bboxes, iou_threshold, input_size, sigma=0.3, method='nms'):
+    """ Bboxes format [x, y, z, w, h, d, score, class_index] """
+    """ Implemented the same way as YOLOv4 """
+    assert method in ['nms', 'soft-nms']
+    if len(bboxes) == 0:
+        best_bboxes = np.zeros([0, 8])
+    else:
+        best_bboxes = []
+        ### NOTE: start looping over boxes to find the best one ###
+        while len(bboxes) > 0:
+            max_ind = np.argmax(bboxes[:, 6])
+            best_bbox = bboxes[max_ind]
+            best_bboxes.append(best_bbox)
+            bboxes = np.concatenate([bboxes[: max_ind], bboxes[max_ind + 1:]])
+            iou = iou3d(best_bbox[np.newaxis, :6], bboxes[:, :6], \
+                        input_size)
+            weight = np.ones((len(iou),), dtype=np.float32)
+            if method == 'nms':
+                iou_mask = iou > iou_threshold
+                weight[iou_mask] = 0.0
+            if method == 'soft-nms':
+                weight = np.exp(-(1.0 * iou ** 2 / sigma))
+            bboxes[:, 6] = bboxes[:, 6] * weight
+            score_mask = bboxes[:, 6] > 0.
+            bboxes = bboxes[score_mask]
+        if len(best_bboxes) != 0:
+            best_bboxes = np.array(best_bboxes)
+        else:
+            best_bboxes = np.zeros([0, 8])
+    return best_bboxes
+
+
 def yoloheadToPredictions(yolohead_output, conf_threshold=0.5):
     """ Transfer YOLO HEAD output to [:, 8], where 8 means
     [x, y, z, w, h, d, score, class_index]"""

@@ -1,5 +1,6 @@
 # Title: RADDet
 # Authors: Ao Zhang, Erlik Nowruzi, Robert Laganiere
+import numpy
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -361,7 +362,11 @@ def smoothOnehot(class_num, hm_classes, smooth_coef=0.01):
 def yoloheadToPredictions(yolohead_output, conf_threshold=0.5):
     """ Transfer YOLO HEAD output to [:, 8], where 8 means
     [x, y, z, w, h, d, score, class_index]"""
-    prediction = yolohead_output.numpy().reshape(-1, yolohead_output.shape[-1])
+    if not isinstance(yolohead_output, numpy.ndarray):
+        prediction = yolohead_output.numpy()
+    else:
+        prediction = yolohead_output
+    prediction = prediction.reshape(-1, yolohead_output.shape[-1])
     prediction_class = np.argmax(prediction[:, 7:], axis=-1)
     predictions = np.concatenate([prediction[:, :7], \
                                   np.expand_dims(prediction_class, axis=-1)], axis=-1)
@@ -373,7 +378,11 @@ def yoloheadToPredictions(yolohead_output, conf_threshold=0.5):
 def yoloheadToPredictions2D(yolohead_output, conf_threshold=0.5):
     """ Transfer YOLO HEAD output to [:, 6], where 6 means
     [x, y, w, h, score, class_index]"""
-    prediction = yolohead_output.numpy().reshape(-1, yolohead_output.shape[-1])
+    if not isinstance(yolohead_output, numpy.ndarray):
+        prediction = yolohead_output.numpy()
+    else:
+        prediction = yolohead_output
+    prediction = prediction.reshape(-1, yolohead_output.shape[-1])
     prediction_class = np.argmax(prediction[:, 5:], axis=-1)
     predictions = np.concatenate([prediction[:, :5], \
                                   np.expand_dims(prediction_class, axis=-1)], axis=-1)

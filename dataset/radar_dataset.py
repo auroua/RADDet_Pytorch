@@ -9,7 +9,7 @@ import torch
 
 class RararDataset(Dataset):
     def __init__(self, config_data, config_train, config_model, headoutput_shape,
-                 anchors, transformer=ToTensor(), anchors_cart=None, cart_shape=None, dType="train"):
+                 anchors, transformer=ToTensor(), anchors_cart=None, cart_shape=None, dType="train", RADDir="RAD"):
         super(RararDataset, self).__init__()
         self.input_size = config_model["input_shape"]
         self.config_data = config_data
@@ -21,6 +21,7 @@ class RararDataset(Dataset):
         self.cart_grid_strides = self.getCartGridStrides()
         self.anchor_boxes = anchors
         self.anchor_boxes_cart = anchors_cart
+        self.RADDir = RADDir
         self.RAD_sequences_train = self.readSequences(mode="train")
         self.RAD_sequences_test = self.readSequences(mode="test")
         ### NOTE: if "if_validat" set true in "config.json", it will split trainset ###
@@ -155,9 +156,9 @@ class RararDataset(Dataset):
         """ Read sequences from train/test directories. """
         assert mode in ["train", "test"]
         if mode == "train":
-            sequences = glob.glob(os.path.join(self.config_data["train_set_dir"], "RAD/*/*.npy"))
+            sequences = glob.glob(os.path.join(self.config_data["train_set_dir"], f"{self.RADDir}/*/*.npy"))
         else:
-            sequences = glob.glob(os.path.join(self.config_data["test_set_dir"], "RAD/*/*.npy"))
+            sequences = glob.glob(os.path.join(self.config_data["test_set_dir"], f"{self.RADDir}/*/*.npy"))
         if len(sequences) == 0:
             raise ValueError("Cannot read data from either train or test directory, "
                              "Please double-check the data path or the data format.")

@@ -9,7 +9,7 @@ import torch
 
 class RararDataset3D(Dataset):
     def __init__(self, config_data, config_train, config_model, headoutput_shape,
-                 anchors, transformer=ToTensor(), anchors_cart=None, cart_shape=None, dType="train"):
+                 anchors, transformer=ToTensor(), anchors_cart=None, cart_shape=None, dType="train", RADDir="RAD"):
         super(RararDataset3D, self).__init__()
         self.input_size = config_model["input_shape"]
         self.config_data = config_data
@@ -17,6 +17,7 @@ class RararDataset3D(Dataset):
         self.config_model = config_model
         self.headoutput_shape = headoutput_shape
         self.cart_shape = cart_shape
+        self.RADDir = RADDir
         self.grid_strides = self.getGridStrides()
         self.cart_grid_strides = self.getCartGridStrides()
         self.anchor_boxes = anchors
@@ -219,9 +220,9 @@ class RararDataset3D(Dataset):
         """ Read sequences from train/test directories. """
         assert mode in ["train", "test"]
         if mode == "train":
-            sequences = glob.glob(os.path.join(self.config_data["train_set_dir"], "RAD/*/*.npy"))
+            sequences = glob.glob(os.path.join(self.config_data["train_set_dir"], f"{self.RADDir}/*/*.npy"))
         elif mode == "test":
-            sequences = glob.glob(os.path.join(self.config_data["test_set_dir"], "RAD/*/*.npy"))
+            sequences = glob.glob(os.path.join(self.config_data["test_set_dir"], f"{self.RADDir}/*/*.npy"))
         else:
             raise ValueError(f"{mode} type does not exist.")
         if len(sequences) == 0:

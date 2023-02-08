@@ -7,10 +7,10 @@ from torchvision.transforms import ToTensor
 import torch
 
 
-class RararDatasetEvaluate(Dataset):
+class RararDatasetEvaluateTF(Dataset):
     def __init__(self, config_data, config_train, config_model, config_radar, headoutput_shape,
                  anchors, transformer=ToTensor(), anchors_cart=None, cart_shape=None, dType="train", RADDir="RAD"):
-        super(RararDatasetEvaluate, self).__init__()
+        super(RararDatasetEvaluateTF, self).__init__()
         self.input_size = config_model["input_shape"]
         self.config_data = config_data
         self.config_train = config_train
@@ -51,21 +51,6 @@ class RararDatasetEvaluate(Dataset):
             if RAD_complex is None:
                 raise ValueError("RAD file not found, please double check the path")
 
-            interpolation = 15
-            RA = helper.getLog(helper.getSumDim(helper.getMagnitude(RAD_complex,
-                                                                    power_order=2), target_axis=-1),
-                               scalar=10, log_10=True)
-            RD = helper.getLog(helper.getSumDim(helper.getMagnitude(RAD_complex,
-                                                                    power_order=2), target_axis=1),
-                               scalar=10, log_10=True)
-            RA_cart = helper.toCartesianMask(RA, self.config_radar, gapfill_interval_num=interpolation)
-            RA_img = helper.norm2Image(RA)[..., :3]
-            RD_img = helper.norm2Image(RD)[..., :3]
-            RA_cart_img = helper.norm2Image(RA_cart)[..., :3]
-
-            img_file = loader.imgfileFromRADfile_new(RAD_filename, self.config_data["test_set_dir"], self.config_data["RAD_dir"])
-            stereo_left_image = loader.readStereoLeft(img_file)
-
             RAD_data = helper.complexTo2Channels(RAD_complex)
             RAD_data = (RAD_data - self.config_data["global_mean_log"]) / self.config_data["global_variance_log"]
 
@@ -82,11 +67,7 @@ class RararDatasetEvaluate(Dataset):
             label_cart = torch.where(label_cart == 0., torch.ones_like(label_cart) * 1e-10, label_cart)
             raw_boxes = torch.unsqueeze(torch.tensor(raw_boxes, dtype=torch.float32), dim=0)
             raw_boxes_cart = torch.unsqueeze(torch.tensor(raw_boxes_cart, dtype=torch.float32), dim=0)
-            return RAD_filename, data, label, label_cart, raw_boxes, raw_boxes_cart, \
-                stereo_left_image, RD_img, RA_img, RA_cart_img, gt_instances
-            # return data, label, label_cart, raw_boxes, raw_boxes_cart, \
-            #     stereo_left_image, RD_img, RA_img, RA_cart_img, gt_instances
-
+            return RAD_filename, data, label, label_cart, raw_boxes, raw_boxes_cart
 
     def getGridStrides(self, ):
         """ Get grid strides """
